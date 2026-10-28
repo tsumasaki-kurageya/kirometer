@@ -12,6 +12,7 @@ from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
 from data_quality import audit_metadata
 from model_analysis import model_snapshots
+from trends import daily_trends
 from turn_analysis import session_turns, prompt_previews
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -232,3 +233,32 @@ if not model_table.empty:
     st.bar_chart(model_table.set_index("モデル（保存時点）")["セッション数"])
     st.dataframe(model_table, hide_index=True, use_container_width=True)
 st.info("これはモデル別のクレジット消費量ではありません。Autoの実際の割当モデルやセッション途中のモデル変更はこの情報だけではわかりません。")
+
+st.divider()
+st.subheader("⑧ 消費傾向と急増日の確認")
+st.caption("サイドバーの絞り込みを反映。過去7暦日（当日は除く）の平均と比較します。記録がない日は0として計算するため、履歴欠損があると急増判定に影響します。")
+threshold = st.slider("急増判定：普段の何倍か", 1.5, 5.0, 2.0, 0.5)
+minimum = st.number_input("急増判定：最低クレジット", min_value=0.0, value=20.0, step=10.0)
+trends = daily_trends(recorded[["date", "credits"]], threshold, minimum)
+if trends.empty:
+    st.info("選択した範囲に日別使用量がありません。")
+else:
+    trend_chart = trends.set_index("date")[["credits", "previous_7d_avg"]].rename(columns={
+        "credits": "消費クレジット", "previous_7d_avg": "直前7日平均"
+    })
+    st.line_chart(trend_chart)
+    spikes = trends[trends["is_spike"]].sort_values("date", ascending=False)
+    st.metric("急増した日", f"{len(spikes)}日")
+    if spikes.empty:
+        st.info("指定条件に合う急増日はありません。")
+    else:
+        for _, spike in spikes.iterrows():
+            day = spike["date"].date()
+            with st.expander(f"{day}：{spike['credits']:.2f} credits（直前平均 {spike['previous_7d_avg']:.2f}）"):
+                target = recorded[recorded["date"] == day].sort_values("credits", ascending=False)
+                st.dataframe(
+                    target[["title", "project", "credits", "turns"]].rename(columns={
+                        "title": "セッション", "project": "プロジェクト", "credits": "クレジット", "turns": "ターン数"
+                    }), use_container_width=True, hide_index=True
+                )
+st.caption("ここでの急増は統計的異常の確定ではなく、設定した閾値による目印です。")
