@@ -10,6 +10,7 @@ import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
+from data_quality import audit_metadata
 from turn_analysis import session_turns, prompt_previews
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -187,3 +188,26 @@ if len(ranking):
     else:
         st.info("このセッションにターンごとの使用量は見つかりませんでした。")
 
+
+st.divider()
+with st.expander("📋 データ取得品質とモデル情報の調査", expanded=False):
+    st.caption("Kiro CLI 2.35.1のJSONメタデータだけを検査します。会話・モデル名・ファイルパスなどの値は表示しません。")
+    @st.cache_data(ttl=60)
+    def audit(directory: str):
+        return audit_metadata(Path(directory))
+    if st.button("取得状況を検査"):
+        report = audit(str(root))
+        n = report["counts"]
+        a, b, d = st.columns(3)
+        a.metric("読み取り可能なJSON", f"{n.get('files', 0) - n.get('unreadable', 0):,}件")
+        b.metric("クレジット記録のあるターン", f"{n.get('metered_turns', 0):,} / {n.get('turns', 0):,}")
+        d.metric("クレジット記録のないセッション", f"{n.get('unmetered_sessions', 0):,}件")
+        if report["model_fields"]:
+            st.write("**モデル関連フィールドが見つかった場所と出現件数**")
+            st.dataframe(pd.DataFrame(
+                [{"フィールド": k, "出現数": v} for k, v in report["model_fields"].items()]
+            ), hide_index=True, use_container_width=True)
+            st.info("モデルのフィールドが存在しても、モデル別クレジットを計算できるとは限りません。課金記録との対応付けは別途検証が必要です。")
+        else:
+            st.info("今回調べたメタデータ階層にはモデル識別フィールドが見つかりませんでした。現時点ではモデル別使用量を算出しません。")
+        st.caption("SQLiteやJSONLのモデル情報については未調査です。これらを解析しても、モデル別クレジットが正確に求められるとは限りません。")
