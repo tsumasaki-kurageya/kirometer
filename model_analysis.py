@@ -4,11 +4,13 @@ import json
 from collections import Counter
 from pathlib import Path
 
-def model_snapshots(root: Path) -> dict:
+def model_snapshots(root: Path, session_ids: set[str] | None = None) -> dict:
     counts = Counter()
     metered = Counter()
     total = 0
     for path in root.glob("*.json"):
+        if session_ids is not None and path.stem not in session_ids:
+            continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
