@@ -11,6 +11,7 @@ import streamlit as st
 from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
 from data_quality import audit_metadata
+from model_analysis import model_snapshots
 from turn_analysis import session_turns, prompt_previews
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -211,3 +212,23 @@ with st.expander("📋 データ取得品質とモデル情報の調査", expand
         else:
             st.info("今回調べたメタデータ階層にはモデル識別フィールドが見つかりませんでした。現時点ではモデル別使用量を算出しません。")
         st.caption("SQLiteやJSONLのモデル情報については未調査です。これらを解析しても、モデル別クレジットが正確に求められるとは限りません。")
+
+st.divider()
+st.subheader("⑦ モデル別セッション数")
+st.caption("各セッションの保存時点のモデル設定を集計します。途中の切替やAuto内部の選択モデルは特定できません。")
+@st.cache_data(ttl=60)
+def get_models(directory: str):
+    return model_snapshots(Path(directory))
+models = get_models(str(root))
+known = models["total"] - models["counts"].get("記録なし", 0)
+m1, m2 = st.columns(2)
+m1.metric("モデル情報があるセッション", f'{known:,} / {models["total"]:,}')
+m2.metric("記録取得率", f'{known / models["total"] * 100:.1f}%' if models["total"] else "—")
+model_table = pd.DataFrame([
+    {"モデル（保存時点）": name, "セッション数": count, "クレジット記録あり": models["metered"].get(name, 0)}
+    for name, count in models["counts"].items()
+]).sort_values("セッション数", ascending=False)
+if not model_table.empty:
+    st.bar_chart(model_table.set_index("モデル（保存時点）")["セッション数"])
+    st.dataframe(model_table, hide_index=True, use_container_width=True)
+st.info("これはモデル別のクレジット消費量ではありません。Autoの実際の割当モデルやセッション途中のモデル変更はこの情報だけではわかりません。")
