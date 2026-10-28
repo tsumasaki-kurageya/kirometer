@@ -38,3 +38,24 @@ SQLite/JSONL are **not** read in Phase 1. Session titles/paths can be sensitive;
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Multiple local history sources (Phase 3)
+
+In the sidebar, enter extra `cli` session directories, one per line. For example,
+a read-only copy from another WSL environment or Mac.
+
+- Local metadata JSON is read directly. No uploads or automatic copying.
+- Matching `session_id` values are counted only once. A record with credit
+  metering is preferred; if both have the same metering availability, the
+  newer updated record is used.
+- The source path of the selected record determines where the optional
+  prompt preview is loaded from.
+- Missing folders and duplicate session IDs are counted in the sidebar.
+- Model snapshot counts honor the deduplicated session selection.
+- The detailed data-quality audit currently inspects the primary directory only.
+
+This is **multi-directory reading**, not scheduled ingestion or durable storage.
+Source folders must remain available. Copying conversation/session files can
+expose confidential content: keep any imported copies local and access-controlled.
+
+Run `python3 -m unittest discover -s tests -v` to verify parsing/deduplication.
