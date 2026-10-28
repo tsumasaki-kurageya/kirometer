@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 
-from kirometer import DEFAULT_ROOT, load_sessions
+from kirometer import DEFAULT_ROOT
+from multi_source import load_multiple, parse_roots
 from phase2 import project_name
 from data_quality import audit_metadata
 from model_analysis import model_snapshots
@@ -35,10 +36,12 @@ with st.expander("はじめての方へ：この画面の見方", expanded=True)
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_data(directory: str):
-    return load_sessions(Path(directory))
+    return load_multiple([Path(p) for p in directory])
 
 st.sidebar.header("絞り込み")
 root = Path(st.sidebar.text_input("履歴フォルダ", value=str(DEFAULT_ROOT))).expanduser()
+extra_sources = st.sidebar.text_area("追加の履歴フォルダ（1行に1件）", value="")
+roots = parse_roots(root, extra_sources)
 if not root.is_dir():
     st.error(f"履歴フォルダが見つかりません：{root}")
     st.stop()
@@ -46,8 +49,9 @@ if st.sidebar.button("🔄 履歴を再読み込み"):
     get_data.clear()
     st.rerun()
 
-sessions, diagnostics = get_data(str(root))
+sessions, source_map, diagnostics = get_data(tuple(map(str, roots)))
 normalize = st.sidebar.checkbox('Git Worktreeを統合する', value=True)
+st.sidebar.caption(f"重複除外：{diagnostics['duplicate_sessions']:,}件／未発見ソース：{diagnostics['missing_sources']:,}件")
 st.sidebar.caption(f"読み込み：{diagnostics['loaded']:,} / {diagnostics['files']:,} 件（不正：{diagnostics['invalid']:,} 件）")
 
 rows = [{
@@ -55,6 +59,7 @@ rows = [{
     "title": s.title,
     "project": project_name(s.cwd, normalize),
     "cwd": s.cwd,
+    "source": str(source_map[s.session_id]),
     "created_at": s.created_at,
     "updated_at": s.updated_at,
     "credits": s.credits,
@@ -165,11 +170,12 @@ st.subheader("⑥ ターン別のクレジット消費")
 st.caption("上の「⑤ セッション詳細」で選んだセッションを、指示（ターン）ごとに分解します。指示内容は明示的に許可した場合のみローカルで表示します。")
 if len(ranking):
     show_prompts = st.checkbox("指示内容を表示（機密情報に注意）", value=False)
-    turn_rows = session_turns(root, selected_id)
+    selected_root = source_map[selected_id]
+    turn_rows = session_turns(selected_root, selected_id)
     if turn_rows:
         turns_df = pd.DataFrame(turn_rows)
         if show_prompts:
-            prompts = prompt_previews(root / (selected_id + ".jsonl"))
+            prompts = prompt_previews(selected_root / (selected_id + ".jsonl"))
             if len(prompts) == len(turns_df):
                 turns_df["指示内容（冒頭）"] = prompts
                 st.caption("Promptイベントと課金ターンを出現順で対応付けた暫定表示です。")
@@ -193,7 +199,7 @@ if len(ranking):
 
 st.divider()
 with st.expander("📋 データ取得品質とモデル情報の調査", expanded=False):
-    st.caption("Kiro CLI 2.35.1のJSONメタデータだけを検査します。会話・モデル名・ファイルパスなどの値は表示しません。")
+    st.caption("取得品質の詳細診断はメインの履歴フォルダのみ対象です。複数ソース集計とは範囲が異なります。")
     @st.cache_data(ttl=60)
     def audit(directory: str):
         return audit_metadata(Path(directory))
@@ -220,7 +226,17 @@ st.caption("サイドバーの期間・プロジェクト・タイトル検索�
 @st.cache_data(ttl=60)
 def get_models(directory: str, ids: tuple[str, ...]):
     return model_snapshots(Path(directory), set(ids))
-models = get_models(str(root), tuple(sorted(df['session_id'].astype(str).tolist())))
+from collections import Counter
+mc, mm = Counter(), Counter()
+mt = 0
+for source_root in roots:
+    ids = tuple(sorted(sid for sid in df["session_id"].astype(str) if source_map.get(sid) == source_root))
+    if ids:
+        part = get_models(str(source_root), ids)
+        mc.update(part["counts"])
+        mm.update(part["metered"])
+        mt += part["total"]
+models = {"counts": dict(mc), "metered": dict(mm), "total": mt}
 known = models["total"] - models["counts"].get("記録なし", 0)
 m1, m2 = st.columns(2)
 m1.metric("モデル情報があるセッション", f'{known:,} / {models["total"]:,}')
