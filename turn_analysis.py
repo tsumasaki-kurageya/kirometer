@@ -58,3 +58,39 @@ def parent_diagnostics(sessions: list) -> dict:
         "linked_with_credits": sum(s.credits is not None for s in pairs),
         "linked_credit_sum": round(sum(s.credits or 0 for s in pairs), 6),
     }
+
+
+def prompt_previews(path: Path, max_chars: int = 180) -> list[str]:
+    """Extract user Prompt event text locally, without storing it.
+
+    Event schema differs by Kiro CLI version. Unknown content is marked
+    unavailable rather than stringifying arbitrary private JSON.
+    """
+    previews = []
+    try:
+        with path.open(encoding="utf-8", errors="replace") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict) or event.get("kind") != "Prompt":
+                    continue
+                data = event.get("data")
+                value = None
+                if isinstance(data, str):
+                    value = data
+                elif isinstance(data, dict):
+                    for key in ("prompt", "text", "message", "content"):
+                        candidate = data.get(key)
+                        if isinstance(candidate, str):
+                            value = candidate
+                            break
+                if not value:
+                    previews.append("（本文形式を判定できません）")
+                else:
+                    flattened = " ".join(value.split())
+                    previews.append(flattened[:max_chars] + ("…" if len(flattened) > max_chars else ""))
+    except OSError:
+        return []
+    return previews
