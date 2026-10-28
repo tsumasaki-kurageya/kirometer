@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
+from phase2 import project_name
 
 JST = ZoneInfo("Asia/Tokyo")
 st.set_page_config(page_title="kirometer｜使用量分析", page_icon="📊", layout="wide")
@@ -42,12 +43,13 @@ if st.sidebar.button("🔄 履歴を再読み込み"):
     st.rerun()
 
 sessions, diagnostics = get_data(str(root))
+normalize = st.sidebar.checkbox('Git Worktreeを統合する', value=True)
 st.sidebar.caption(f"読み込み：{diagnostics['loaded']:,} / {diagnostics['files']:,} 件（不正：{diagnostics['invalid']:,} 件）")
 
 rows = [{
     "session_id": s.session_id,
     "title": s.title,
-    "project": s.project,
+    "project": project_name(s.cwd, normalize),
     "cwd": s.cwd,
     "created_at": s.created_at,
     "updated_at": s.updated_at,
@@ -153,3 +155,4 @@ st.download_button(
     mime="text/csv",
     help="タイトルと作業パスが含まれます。公開リポジトリへのアップロードには注意してください。",
 )
+
