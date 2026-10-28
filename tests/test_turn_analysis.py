@@ -34,7 +34,7 @@ class TurnAnalysisTests(unittest.TestCase):
     def test_prompt_preview(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "s.jsonl"
-            p.write_text("\\n".join(json.dumps(e) for e in [
+            p.write_text("\n".join(json.dumps(e) for e in [
                 {"kind": "Prompt", "data": {"text": "認証の処理を修正して"}},
                 {"kind": "AssistantMessage", "data": {"text": "not user"}},
             ]), encoding="utf-8")
