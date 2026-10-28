@@ -10,6 +10,7 @@ import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
+from turn_analysis import session_turns, prompt_previews
 
 JST = ZoneInfo("Asia/Tokyo")
 st.set_page_config(page_title="kirometer｜使用量分析", page_icon="📊", layout="wide")
@@ -155,4 +156,34 @@ st.download_button(
     mime="text/csv",
     help="タイトルと作業パスが含まれます。公開リポジトリへのアップロードには注意してください。",
 )
+
+
+st.subheader("⑥ ターン別のクレジット消費")
+st.caption("上の「⑤ セッション詳細」で選んだセッションを、指示（ターン）ごとに分解します。指示内容は明示的に許可した場合のみローカルで表示します。")
+if len(ranking):
+    show_prompts = st.checkbox("指示内容を表示（機密情報に注意）", value=False)
+    turn_rows = session_turns(root, selected_id)
+    if turn_rows:
+        turns_df = pd.DataFrame(turn_rows)
+        if show_prompts:
+            prompts = prompt_previews(root / (selected_id + ".jsonl"))
+            if len(prompts) == len(turns_df):
+                turns_df["指示内容（冒頭）"] = prompts
+                st.caption("Promptイベントと課金ターンを出現順で対応付けた暫定表示です。")
+            else:
+                st.warning(f"Prompt {len(prompts)}件、課金ターン {len(turns_df)}件で件数が一致しないため指示内容は表示しません。")
+        valid_turns = turns_df.dropna(subset=["credits"])
+        st.metric("記録があるターン", f"{len(valid_turns)} / {len(turns_df)}")
+        if not valid_turns.empty:
+            st.bar_chart(valid_turns.set_index("turn")["credits"], x_label="ターン番号", y_label="クレジット")
+            st.dataframe(
+                valid_turns.sort_values("credits", ascending=False).rename(columns={"turn": "ターン番号", "credits": "クレジット"}),
+                use_container_width=True, hide_index=True
+            )
+            session_total = float(item["credits"])
+            turn_total = float(valid_turns["credits"].sum())
+            if abs(session_total - turn_total) > 0.001:
+                st.warning(f"セッション合計とターン合計に差があります（{session_total:.2f} / {turn_total:.2f}）。")
+    else:
+        st.info("このセッションにターンごとの使用量は見つかりませんでした。")
 
