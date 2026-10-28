@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
-from phase2 import load_skill_evidence, project_name
+from phase2 import project_name
 
 JST = ZoneInfo("Asia/Tokyo")
 st.set_page_config(page_title="kirometer｜使用量分析", page_icon="📊", layout="wide")
@@ -44,16 +44,12 @@ if st.sidebar.button("🔄 履歴を再読み込み"):
 
 sessions, diagnostics = get_data(str(root))
 normalize = st.sidebar.checkbox('Git Worktreeを統合する', value=True)
-skill_evidence = load_skill_evidence(root, {s.session_id for s in sessions})
 st.sidebar.caption(f"読み込み：{diagnostics['loaded']:,} / {diagnostics['files']:,} 件（不正：{diagnostics['invalid']:,} 件）")
 
 rows = [{
     "session_id": s.session_id,
     "title": s.title,
     "project": project_name(s.cwd, normalize),
-    "skill_reads": skill_evidence[s.session_id].read_calls,
-    "skill_shells": skill_evidence[s.session_id].shell_calls,
-    "skill_names": ", ".join(sorted(skill_evidence[s.session_id].named_skills)),
     "cwd": s.cwd,
     "created_at": s.created_at,
     "updated_at": s.updated_at,
@@ -160,13 +156,3 @@ st.download_button(
     help="タイトルと作業パスが含まれます。公開リポジトリへのアップロードには注意してください。",
 )
 
-st.subheader("⑥ Skill関連操作（暫定）")
-st.caption("read/shellの引数にSKILL.mdがある操作候補。発動を確定するものではなく、編集・調査も含みます。")
-skill_found = df[(df["skill_reads"] + df["skill_shells"]) > 0]
-a, b, d = st.columns(3)
-a.metric("Skill操作候補あり", f"{len(skill_found):,} セッション")
-b.metric("read候補", f"{int(df['skill_reads'].sum()):,}")
-d.metric("shell候補", f"{int(df['skill_shells'].sum()):,}")
-if len(skill_found):
-    st.dataframe(skill_found[["title", "project", "credits", "skill_reads", "skill_shells", "skill_names"]].rename(columns={"title": "セッション", "project": "プロジェクト", "credits": "クレジット", "skill_reads": "read候補", "skill_shells": "shell候補", "skill_names": "Skill名候補"}), hide_index=True, use_container_width=True)
-st.caption("記録なし＝未発動、ではありません。")
