@@ -215,11 +215,11 @@ with st.expander("📋 データ取得品質とモデル情報の調査", expand
 
 st.divider()
 st.subheader("⑦ モデル別セッション数")
-st.caption("各セッションの保存時点のモデル設定を集計します。途中の切替やAuto内部の選択モデルは特定できません。")
+st.caption("サイドバーの期間・プロジェクト・タイトル検索を反映します。保存時点のモデル設定であり、途中切替やAuto内部の選択モデルは特定できません。")
 @st.cache_data(ttl=60)
-def get_models(directory: str):
-    return model_snapshots(Path(directory))
-models = get_models(str(root))
+def get_models(directory: str, ids: tuple[str, ...]):
+    return model_snapshots(Path(directory), set(ids))
+models = get_models(str(root), tuple(sorted(df['session_id'].astype(str).tolist())))
 known = models["total"] - models["counts"].get("記録なし", 0)
 m1, m2 = st.columns(2)
 m1.metric("モデル情報があるセッション", f'{known:,} / {models["total"]:,}')
@@ -227,7 +227,7 @@ m2.metric("記録取得率", f'{known / models["total"] * 100:.1f}%' if models["
 model_table = pd.DataFrame([
     {"モデル（保存時点）": name, "セッション数": count, "クレジット記録あり": models["metered"].get(name, 0)}
     for name, count in models["counts"].items()
-]).sort_values("セッション数", ascending=False)
+], columns=["モデル（保存時点）", "セッション数", "クレジット記録あり"]).sort_values("セッション数", ascending=False)
 if not model_table.empty:
     st.bar_chart(model_table.set_index("モデル（保存時点）")["セッション数"])
     st.dataframe(model_table, hide_index=True, use_container_width=True)
