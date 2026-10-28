@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from turn_analysis import credit_rows, session_turns, parent_diagnostics
+from turn_analysis import credit_rows, session_turns, parent_diagnostics, prompt_previews
 
 
 class TurnAnalysisTests(unittest.TestCase):
@@ -30,6 +30,15 @@ class TurnAnalysisTests(unittest.TestCase):
             }))
             self.assertEqual(session_turns(root, "s1")[0]["credits"], 4)
             self.assertEqual(session_turns(root, "../s1"), [])
+
+    def test_prompt_preview(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "s.jsonl"
+            p.write_text("\\n".join(json.dumps(e) for e in [
+                {"kind": "Prompt", "data": {"text": "認証の処理を修正して"}},
+                {"kind": "AssistantMessage", "data": {"text": "not user"}},
+            ]), encoding="utf-8")
+            self.assertEqual(prompt_previews(p), ["認証の処理を修正して"])
 
     def test_parent_diagnostics_do_not_deduct(self):
         s = [
