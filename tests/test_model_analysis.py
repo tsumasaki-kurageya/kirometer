@@ -20,6 +20,11 @@ class ModelTests(unittest.TestCase):
             self.assertEqual(result["counts"]["auto"],1)
             self.assertEqual(result["counts"]["記録なし"],1)
             self.assertEqual(result["metered"]["auto"],1)
+            filtered=model_snapshots(root, {"0", "2"})
+            self.assertEqual(filtered["total"], 2)
+            self.assertEqual(filtered["counts"].get("claude-opus-5.5", 0), 0)
+            self.assertEqual(filtered["counts"]["auto"], 1)
+            self.assertEqual(model_snapshots(root, set())["total"], 0)
 
 if __name__ == "__main__":
     unittest.main()
