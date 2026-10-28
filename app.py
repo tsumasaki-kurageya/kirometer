@@ -10,6 +10,7 @@ import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
+from turn_analysis import session_turns, parent_diagnostics
 
 JST = ZoneInfo("Asia/Tokyo")
 st.set_page_config(page_title="kirometer｜使用量分析", page_icon="📊", layout="wide")
@@ -156,3 +157,32 @@ st.download_button(
     help="タイトルと作業パスが含まれます。公開リポジトリへのアップロードには注意してください。",
 )
 
+
+st.subheader("⑥ ターン別のクレジット消費")
+st.caption("上の「⑤ セッション詳細」で選んだセッションを、指示（ターン）ごとに分解します。指示文は読み込みません。")
+if len(ranking):
+    turn_rows = session_turns(root, selected_id)
+    if turn_rows:
+        turns_df = pd.DataFrame(turn_rows)
+        valid_turns = turns_df.dropna(subset=["credits"])
+        st.metric("記録があるターン", f"{len(valid_turns)} / {len(turns_df)}")
+        if not valid_turns.empty:
+            st.bar_chart(valid_turns.set_index("turn")["credits"], x_label="ターン番号", y_label="クレジット")
+            st.dataframe(
+                valid_turns.sort_values("credits", ascending=False).rename(columns={"turn": "ターン番号", "credits": "クレジット"}),
+                use_container_width=True, hide_index=True
+            )
+            session_total = float(item["credits"])
+            turn_total = float(valid_turns["credits"].sum())
+            if abs(session_total - turn_total) > 0.001:
+                st.warning(f"セッション合計とターン合計に差があります（{session_total:.2f} / {turn_total:.2f}）。")
+    else:
+        st.info("このセッションにターンごとの使用量は見つかりませんでした。")
+
+st.subheader("⑦ 親子セッションの集計上の注意")
+parent_stats = parent_diagnostics(sessions)
+x, y, z = st.columns(3)
+x.metric("親IDを持つセッション", parent_stats["child_sessions"])
+y.metric("親セッションを確認できた件数", parent_stats["linked_children"])
+z.metric("親子リンクのある子の記録クレジット合計", f'{parent_stats["linked_credit_sum"]:,.2f}')
+st.warning("親子間でクレジットが重複計上されているかは未確認です。数値の自動控除は行いません。")
