@@ -10,7 +10,7 @@ import streamlit as st
 
 from kirometer import DEFAULT_ROOT, load_sessions
 from phase2 import project_name
-from turn_analysis import session_turns, parent_diagnostics
+from turn_analysis import session_turns, prompt_previews
 
 JST = ZoneInfo("Asia/Tokyo")
 st.set_page_config(page_title="kirometer｜使用量分析", page_icon="📊", layout="wide")
@@ -159,11 +159,19 @@ st.download_button(
 
 
 st.subheader("⑥ ターン別のクレジット消費")
-st.caption("上の「⑤ セッション詳細」で選んだセッションを、指示（ターン）ごとに分解します。指示文は読み込みません。")
+st.caption("上の「⑤ セッション詳細」で選んだセッションを、指示（ターン）ごとに分解します。指示内容は明示的に許可した場合のみローカルで表示します。")
 if len(ranking):
+    show_prompts = st.checkbox("指示内容を表示（機密情報に注意）", value=False)
     turn_rows = session_turns(root, selected_id)
     if turn_rows:
         turns_df = pd.DataFrame(turn_rows)
+        if show_prompts:
+            prompts = prompt_previews(root / (selected_id + ".jsonl"))
+            if len(prompts) == len(turns_df):
+                turns_df["指示内容（冒頭）"] = prompts
+                st.caption("Promptイベントと課金ターンを出現順で対応付けた暫定表示です。")
+            else:
+                st.warning(f"Prompt {len(prompts)}件、課金ターン {len(turns_df)}件で件数が一致しないため指示内容は表示しません。")
         valid_turns = turns_df.dropna(subset=["credits"])
         st.metric("記録があるターン", f"{len(valid_turns)} / {len(turns_df)}")
         if not valid_turns.empty:
@@ -179,10 +187,3 @@ if len(ranking):
     else:
         st.info("このセッションにターンごとの使用量は見つかりませんでした。")
 
-st.subheader("⑦ 親子セッションの集計上の注意")
-parent_stats = parent_diagnostics(sessions)
-x, y, z = st.columns(3)
-x.metric("親IDを持つセッション", parent_stats["child_sessions"])
-y.metric("親セッションを確認できた件数", parent_stats["linked_children"])
-z.metric("親子リンクのある子の記録クレジット合計", f'{parent_stats["linked_credit_sum"]:,.2f}')
-st.warning("親子間でクレジットが重複計上されているかは未確認です。数値の自動控除は行いません。")
